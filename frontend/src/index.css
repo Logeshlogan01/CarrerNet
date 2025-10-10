@@ -1,0 +1,16 @@
+/* Global styles */
+body {
+  background-color: #f9fafb; /* equivalent to Tailwind's bg-gray-50 */
+  color: #1f2937;            /* equivalent to Tailwind's text-gray-800 */
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}

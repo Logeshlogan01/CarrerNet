@@ -1,0 +1,73 @@
+
+```bash
+# Create React app with Vite
+npm create vite@latest frontend --template react
+cd frontend
+
+# Install dependencies
+npm install react-router-dom axios
+npm install -D tailwindcss postcss autoprefixer
+
+# Initialize Tailwind
+npx tailwindcss init -p
+
+# Optional UI libraries
+npm install @headlessui/react @heroicons/react
+```
+
+---
+
+### 🔹 Backend
+
+```bash
+# Go back to root
+cd ..
+
+# Create backend folder
+mkdir backend && cd backend
+npm init -y
+
+# Install backend dependencies
+npm install express mongoose cors body-parser dotenv
+npm install bcryptjs jsonwebtoken
+npm install express-session connect-mongo
+
+# Dev tool
+npm install -D nodemon
+
+# Optional extras
+npm install multer           # file uploads
+npm install pdfkit exceljs   # export PDF/Excel
+npm install nodemailer twilio # email + SMS
+npm install groq-sdk          # chatbot API
+
+cd backend
+
+# Nodemailer for email notifications
+npm install nodemailer
+
+# Google Calendar API + OAuth2 client
+npm install googleapis
+
+# Firebase Admin SDK (for push notifications later)
+npm install firebase-admin
+
+
+---
+
+✅ Run frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+✅ Run backend:
+
+```bash
+cd backend
+npm run dev
+
+npm install multer
+npm install express mongoose dotenv cors bcryptjs jsonwebtoken
+

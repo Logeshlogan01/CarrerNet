@@ -1,0 +1,268 @@
+import express from "express";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import cors from "cors";
+import nodemailer from "nodemailer";
+import { google } from "googleapis";
+import jwt from "jsonwebtoken";
+import multer from "multer";
+import path from "path";
+
+// Import Routes & Models
+import authRoutes from "./routes/auth.js";           // 👈 NEW: handles signup & login
+import userRoutes from "./routes/userRoutes.js";     // ✅ User profile, password, etc.
+import User from "./models/User.js";
+import Scholarship from "./models/Scholarship.js";
+
+dotenv.config();
+const app = express();
+
+// Middleware
+app.use(express.json());
+app.use(cors());
+app.use("/uploads", express.static("uploads")); // Serve uploaded files
+
+/* ==========================
+   Multer Setup for Brochures
+========================== */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
+});
+const upload = multer({ storage });
+
+/* ==========================
+   DATABASE CONNECTION
+========================== */
+mongoose
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => console.error("❌ MongoDB Error:", err));
+
+/* ==========================
+   MODELS
+========================== */
+const Event = mongoose.model("Event", new mongoose.Schema({
+  title: { type: String, required: true },
+  description: String,
+  date: { type: Date, required: true },
+  location: String,
+  brochure: String,
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+}));
+
+const Opportunity = mongoose.model("Opportunity", new mongoose.Schema({
+  role: { type: String, required: true },
+  company: String,
+  location: String,
+  details: String,
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+}));
+
+/* ==========================
+   AUTH MIDDLEWARE
+========================== */
+const authMiddleware = async (req, res, next) => {
+  const token = req.headers["authorization"]?.split(" ")[1];
+  if (!token) return res.status(401).json({ msg: "No token provided" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded.id;
+    next();
+  } catch (err) {
+    return res.status(401).json({ msg: "Invalid token" });
+  }
+};
+
+/* ==========================
+   DASHBOARD
+========================== */
+app.get("/api/dashboard", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user).select("name email");
+    res.json({
+      msg: `Welcome ${user.name}, this is protected data!`,
+      user,
+    });
+  } catch (err) {
+    console.error("Dashboard error:", err);
+    res.status(500).json({ msg: "Server error" });
+  }
+});
+
+/* ==========================
+   EVENTS
+========================== */
+app.post("/api/events", authMiddleware, upload.single("brochure"), async (req, res) => {
+  try {
+    const { title, description, date, location } = req.body;
+
+    if (!title || !date || !location) {
+      return res.status(400).json({ msg: "Missing required fields" });
+    }
+
+    if (new Date(date) < new Date()) {
+      return res.status(400).json({ msg: "Event date must be today or future" });
+    }
+
+    const event = new Event({
+      title,
+      description,
+      date,
+      location,
+      createdBy: req.user,
+      brochure: req.file ? `/uploads/${req.file.filename}` : null,
+    });
+
+    await event.save();
+    res.json({ msg: "✅ Event added successfully", event });
+  } catch (err) {
+    console.error("Error adding event:", err);
+    res.status(500).json({ msg: "Failed to add event" });
+  }
+});
+
+app.get("/api/events", async (req, res) => {
+  try {
+    const events = await Event.find().populate("createdBy", "name email");
+    res.json(events);
+  } catch (err) {
+    console.error("Error fetching events:", err);
+    res.status(500).json({ msg: "Failed to fetch events" });
+  }
+});
+
+/* ==========================
+   OPPORTUNITIES
+========================== */
+app.post("/api/opportunities", authMiddleware, async (req, res) => {
+  try {
+    const { role, company, location, details } = req.body;
+    const opp = new Opportunity({
+      role,
+      company,
+      location,
+      details,
+      createdBy: req.user,
+    });
+    await opp.save();
+    res.json({ msg: "✅ Opportunity posted successfully", opp });
+  } catch (err) {
+    console.error("Error posting opportunity:", err);
+    res.status(500).json({ msg: "Failed to post opportunity" });
+  }
+});
+
+app.get("/api/opportunities", async (req, res) => {
+  try {
+    const opps = await Opportunity.find().populate("createdBy", "name email");
+    res.json(opps);
+  } catch (err) {
+    console.error("Error fetching opportunities:", err);
+    res.status(500).json({ msg: "Failed to fetch opportunities" });
+  }
+});
+
+/* ==========================
+   SCHOLARSHIPS
+========================== */
+app.post("/api/scholarships", authMiddleware, upload.single("brochure"), async (req, res) => {
+  try {
+    const { title, eligibility, deadline, amount, description } = req.body;
+
+    if (!title || !eligibility || !deadline) {
+      return res.status(400).json({ msg: "Missing required fields" });
+    }
+
+    const scholarship = new Scholarship({
+      title,
+      eligibility,
+      deadline,
+      amount,
+      description,
+      createdBy: req.user,
+      brochure: req.file ? `/uploads/${req.file.filename}` : null,
+    });
+
+    await scholarship.save();
+    res.json({ msg: "✅ Scholarship added successfully", scholarship });
+  } catch (err) {
+    console.error("Error adding scholarship:", err);
+    res.status(500).json({ msg: "Failed to add scholarship" });
+  }
+});
+
+app.get("/api/scholarships", async (req, res) => {
+  try {
+    const scholarships = await Scholarship.find().populate("createdBy", "name email");
+    res.json(scholarships);
+  } catch (err) {
+    console.error("Error fetching scholarships:", err);
+    res.status(500).json({ msg: "Failed to fetch scholarships" });
+  }
+});
+
+/* ==========================
+   EMAIL NOTIFICATIONS
+========================== */
+app.post("/api/notify", async (req, res) => {
+  const { to, subject, text } = req.body;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+
+    await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, text });
+    res.json({ msg: "✅ Notification sent successfully!" });
+  } catch (err) {
+    console.error("Notification Error:", err);
+    res.status(500).json({ msg: "Failed to send email" });
+  }
+});
+
+/* ==========================
+   GOOGLE CALENDAR
+========================== */
+const oAuth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+oAuth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+
+app.post("/api/calendar/add", async (req, res) => {
+  try {
+    const { summary, description, startTime, endTime } = req.body;
+    const calendar = google.calendar({ version: "v3", auth: oAuth2Client });
+
+    const event = {
+      summary,
+      description,
+      start: { dateTime: startTime, timeZone: "Asia/Kolkata" },
+      end: { dateTime: endTime, timeZone: "Asia/Kolkata" },
+    };
+
+    await calendar.events.insert({ calendarId: "primary", resource: event });
+    res.json({ msg: "✅ Event added to Google Calendar!" });
+  } catch (err) {
+    console.error("Google Calendar Error:", err);
+    res.status(500).json({ msg: "Failed to add event to calendar" });
+  }
+});
+
+/* ==========================
+   ROUTES (Modular)
+========================== */
+app.use("/api/auth", authRoutes);   // 👈 Handles signup & login
+app.use("/api/users", userRoutes);  // 👈 Handles profile, password, etc.
+
+/* ==========================
+   SERVER START
+========================== */
+const PORT = process.env
